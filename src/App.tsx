@@ -1,5 +1,6 @@
 import PlaylistSelector from "./components/PlaylistSelector";
 import MusicSelector from "./components/MusicSelector";
+import TrechoSelector from "./components/TrechoSelector";
 import { useEffect, useState } from "react";
 import { fontes } from "./data/fontes";
 import defaultCover from "./assets/Default.png"
@@ -10,6 +11,13 @@ export default function App() {
   type MusicaParametrizada = MusicaBase & {
     obrigatoria: boolean;
     repetir: boolean;
+    peso: number;
+  };
+
+  type Trecho = {
+    id: number;
+    nome: string;
+    musicas: MusicaBase[];
     peso: number;
   };
 
@@ -28,8 +36,18 @@ export default function App() {
 
   const [musicasParametrizadas1, setMusicasParametrizadas1] = useState<MusicaParametrizada[]>([]);
   const [musicasParametrizadas2, setMusicasParametrizadas2] = useState<MusicaParametrizada[]>([]);
+  const [musicasNovaPlaylist, setMusicasNovaPlaylist] = useState<MusicaParametrizada[]>([]);
   const [novaPlaylist, setNovaPlaylist] = useState<Playlist>();
   const [number, setNumber] = useState(1);
+  
+  // Estados para gerenciar trechos
+  const [trechos, setTrechos] = useState<Trecho[]>([]);
+  const [trechoAtual, setTrechoAtual] = useState<number>(1);
+  const [musicasSelecionadas, setMusicasSelecionadas] = useState<MusicaBase[]>([]);
+  const [criarComTrechos, setCriarComTrechos] = useState<boolean>(false);
+
+  // Todas as músicas disponíveis de todas as playlists
+  const todasAsMusicas = AllPlaylists.flatMap(playlist => playlist.songs);
 
   const gerarPlaylist = () => {
     const novaMusicas = criarNovaPlaylist();
@@ -41,15 +59,30 @@ export default function App() {
       cover: defaultCover,
       songs: novaMusicas
     };
-    setNovaPlaylist(nova);
-    AllPlaylists.push(nova);
+    
+    // Limpa tudo antes de definir a nova playlist
     setFonte1(null);
     setFonte2(null);
+    setMusicasParametrizadas1([]);
+    setMusicasParametrizadas2([]);
+    
+    // Cria as músicas parametrizadas para a nova playlist
+    const musicasParametrizadasNova = novaMusicas.map(m => ({
+      ...m,
+      obrigatoria: false,
+      repetir: false,
+      peso: 1
+    }));
+    
+    setMusicasNovaPlaylist(musicasParametrizadasNova);
+    setNovaPlaylist(nova);
+    setAllPlaylists([...AllPlaylists, nova]);
     setNumber(number + 1);
   };
 
   useEffect(() => {
     if (fonte1) {
+      console.log('Fonte1 selecionada:', fonte1.title);
       const musicas = fonte1.songs.map(m => ({
         ...m,
         obrigatoria: false,
@@ -57,11 +90,15 @@ export default function App() {
         peso: 1
       }));
       setMusicasParametrizadas1(musicas);
+    } else {
+      console.log('Fonte1 desmarcada');
+      setMusicasParametrizadas1([]);
     }
   }, [fonte1]);
 
   useEffect(() => {
     if (fonte2) {
+      console.log('Fonte2 selecionada:', fonte2.title);
       const musicas = fonte2.songs.map(m => ({
         ...m,
         obrigatoria: false,
@@ -69,8 +106,27 @@ export default function App() {
         peso: 1
       }));
       setMusicasParametrizadas2(musicas);
+    } else {
+      console.log('Fonte2 desmarcada');
+      setMusicasParametrizadas2([]);
     }
   }, [fonte2]);
+
+  // UseEffect para garantir limpeza correta da nova playlist
+  useEffect(() => {
+    if ((fonte1 || fonte2) && novaPlaylist) {
+      console.log('Limpando nova playlist devido a seleção de fonte');
+      setNovaPlaylist(undefined);
+      setMusicasNovaPlaylist([]);
+    }
+  }, [fonte1, fonte2, novaPlaylist]);
+
+  // UseEffect para limpar modo de trechos quando necessário
+  useEffect(() => {
+    if (criarComTrechos && (fonte1 || fonte2)) {
+      setCriarComTrechos(false);
+    }
+  }, [fonte1, fonte2, criarComTrechos]);
 
   function criarNovaPlaylist(): MusicaBase[] {
     const obrigatorias = [
@@ -122,13 +178,145 @@ export default function App() {
     return resultado;
   }
 
+  // Funções para gerenciar trechos
+  const criarTrecho = (nome: string, musicas: MusicaBase[], peso: number) => {
+    const novoTrecho: Trecho = {
+      id: Date.now(),
+      nome,
+      musicas,
+      peso
+    };
+    setTrechos([...trechos, novoTrecho]);
+    setMusicasSelecionadas([]);
+    setTrechoAtual(trechoAtual + 1);
+  };
+
+  const removerTrecho = (id: number) => {
+    setTrechos(trechos.filter(t => t.id !== id));
+  };
+
+  const gerarPlaylistComTrechos = () => {
+    const musicasDosTrechos: MusicaBase[] = [];
+    
+    // Contar total de músicas de todos os trechos
+    const totalMusicas = trechos.reduce((total, trecho) => total + trecho.musicas.length, 0);
+    
+    if (totalMusicas <= 10) {
+      // Se o total não passa de 10, inclui todas as músicas de todos os trechos
+      trechos.forEach(trecho => {
+        musicasDosTrechos.push(...trecho.musicas);
+      });
+    } else {
+      // Se passa de 10, usa lógica de peso para otimizar a seleção
+      const musicasComPeso: { musica: MusicaBase; peso: number; trechoId: number }[] = [];
+      
+      // Criar array de músicas com seus respectivos pesos
+      trechos.forEach(trecho => {
+        trecho.musicas.forEach(musica => {
+          musicasComPeso.push({
+            musica,
+            peso: trecho.peso,
+            trechoId: trecho.id
+          });
+        });
+      });
+      
+      // Criar pool baseado no peso (música com peso maior aparece mais vezes)
+      const pool: { musica: MusicaBase; trechoId: number }[] = [];
+      musicasComPeso.forEach(item => {
+        for (let i = 0; i < item.peso; i++) {
+          pool.push({ musica: item.musica, trechoId: item.trechoId });
+        }
+      });
+      
+      // Embaralhar o pool
+      const poolEmbaralhado = pool.sort(() => Math.random() - 0.5);
+      
+      // Selecionar até 10 músicas únicas, priorizando diversidade de trechos
+      const musicasAdicionadas = new Set<number>();
+      const trechosUsados = new Map<number, number>(); // trechoId -> quantidade de músicas
+      
+      for (const item of poolEmbaralhado) {
+        if (musicasDosTrechos.length >= 10) break;
+        
+        // Evitar músicas duplicadas
+        if (musicasAdicionadas.has(item.musica.id)) continue;
+        
+        // Tentar manter diversidade: limite de 3 músicas por trecho inicialmente
+        const musicasDoTrecho = trechosUsados.get(item.trechoId) || 0;
+        if (musicasDoTrecho >= 3 && musicasDosTrechos.length < 8) continue;
+        
+        musicasDosTrechos.push(item.musica);
+        musicasAdicionadas.add(item.musica.id);
+        trechosUsados.set(item.trechoId, musicasDoTrecho + 1);
+      }
+      
+      // Se ainda não temos 10 músicas, relaxar a restrição de diversidade
+      if (musicasDosTrechos.length < 10) {
+        for (const item of poolEmbaralhado) {
+          if (musicasDosTrechos.length >= 10) break;
+          
+          if (!musicasAdicionadas.has(item.musica.id)) {
+            musicasDosTrechos.push(item.musica);
+            musicasAdicionadas.add(item.musica.id);
+          }
+        }
+      }
+    }
+
+    // Criar a nova playlist
+    const nova: Playlist = {
+      id: Date.now(),
+      title: "Playlist por Trechos (" + number + ")",
+      description: `Playlist criada com trechos personalizados (${musicasDosTrechos.length} músicas)`,
+      cover: defaultCover,
+      songs: musicasDosTrechos
+    };
+
+    // Limpar estados
+    setFonte1(null);
+    setFonte2(null);
+    setMusicasParametrizadas1([]);
+    setMusicasParametrizadas2([]);
+    setTrechos([]);
+    setTrechoAtual(1);
+    setCriarComTrechos(false);
+    
+    // Definir nova playlist
+    const musicasParametrizadasNova = musicasDosTrechos.map(m => ({
+      ...m,
+      obrigatoria: false,
+      repetir: false,
+      peso: 1
+    }));
+    
+    setMusicasNovaPlaylist(musicasParametrizadasNova);
+    setNovaPlaylist(nova);
+    setAllPlaylists([...AllPlaylists, nova]);
+    setNumber(number + 1);
+  };
+
   return (
     <>
       <div className="w-full h-[calc(100vh-64px)] flex flex-row gap-2">
-        <PlaylistSelector fonte1={fonte1} setFonte1={setFonte1} fonte2={fonte2} setFonte2={setFonte2} AllPlaylists={AllPlaylists} gerarPlaylist={gerarPlaylist} />
-        {fonte1 && <MusicSelector fonte={fonte1} musicas={musicasParametrizadas1} setMusicas={setMusicasParametrizadas1} />}
-        {fonte2 && <MusicSelector fonte={fonte2} musicas={musicasParametrizadas2} setMusicas={setMusicasParametrizadas2} />}
-        {novaPlaylist && !(fonte1 || fonte2) && <MusicSelector fonte={novaPlaylist} musicas={novaPlaylist.songs} setMusicas={() => { }} />}
+        <PlaylistSelector fonte1={fonte1} setFonte1={setFonte1} fonte2={fonte2} setFonte2={setFonte2} AllPlaylists={AllPlaylists} gerarPlaylist={gerarPlaylist} setCriarComTrechos={setCriarComTrechos} />
+        
+        {criarComTrechos && (
+          <TrechoSelector 
+            trechos={trechos}
+            trechoAtual={trechoAtual}
+            musicasSelecionadas={musicasSelecionadas}
+            setMusicasSelecionadas={setMusicasSelecionadas}
+            criarTrecho={criarTrecho}
+            removerTrecho={removerTrecho}
+            gerarPlaylistComTrechos={gerarPlaylistComTrechos}
+            todasAsMusicas={todasAsMusicas}
+          />
+        )}
+        
+        {!criarComTrechos && fonte1 && <MusicSelector key={`fonte1-${fonte1.id}-${Date.now()}`} fonte={fonte1} musicas={musicasParametrizadas1} setMusicas={setMusicasParametrizadas1} />}
+        {!criarComTrechos && fonte2 && <MusicSelector key={`fonte2-${fonte2.id}-${Date.now()}`} fonte={fonte2} musicas={musicasParametrizadas2} setMusicas={setMusicasParametrizadas2} />}
+        {!criarComTrechos && novaPlaylist && !(fonte1 || fonte2) && musicasNovaPlaylist.length > 0 && <MusicSelector key={`nova-${novaPlaylist.id}-${Date.now()}`} fonte={novaPlaylist} musicas={musicasNovaPlaylist} setMusicas={() => { }} />}
       </div>
     </>
   )

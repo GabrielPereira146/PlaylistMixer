@@ -3,16 +3,17 @@ import { fontes } from "../data/fontes";
 import { motion } from "framer-motion";
 import { FaCheck } from "react-icons/fa6";
 import { LiaPlusSolid } from "react-icons/lia";
-import { PiExcludeDuotone, PiMusicNotesPlus } from "react-icons/pi";
+import { PiExcludeDuotone, PiMusicNotesPlus, PiPuzzlePieceFill } from "react-icons/pi";
 import CreateOption from "./CreateOption";
 
-export default function PlaylistSelector({ fonte1, setFonte1, fonte2, setFonte2, AllPlaylists, gerarPlaylist}: {
+export default function PlaylistSelector({ fonte1, setFonte1, fonte2, setFonte2, AllPlaylists, gerarPlaylist, setCriarComTrechos}: {
     fonte1: typeof fontes.playlists[number] | null,
     setFonte1: React.Dispatch<React.SetStateAction<typeof fontes.playlists[number] | null>>,
     fonte2: typeof fontes.playlists[number] | null,
     setFonte2: React.Dispatch<React.SetStateAction<typeof fontes.playlists[number] | null>>,
     AllPlaylists: typeof fontes.playlists,
     gerarPlaylist: () => void;
+    setCriarComTrechos: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
 
     const [controle, setControle] = useState(true);
@@ -21,6 +22,7 @@ export default function PlaylistSelector({ fonte1, setFonte1, fonte2, setFonte2,
 
     const selecionarFonte = (playlist: typeof fontes.playlists[number]) => {
         if (choices) {
+            // Modo de criação de playlists - permite selecionar duas
             if (fonte1?.id === playlist.id) {
                 setFonte1(null);
             } else if (fonte2?.id === playlist.id) {
@@ -36,8 +38,15 @@ export default function PlaylistSelector({ fonte1, setFonte1, fonte2, setFonte2,
                 setFonte2(playlist);
                 setControle(true);
             }
+        } else {
+            // Modo normal - permite selecionar apenas uma
+            if (fonte1?.id === playlist.id) {
+                setFonte1(null);
+            } else {
+                setFonte1(playlist);
+                setFonte2(null); // Limpa a segunda fonte
+            }
         }
-
     };
 
     
@@ -59,6 +68,8 @@ export default function PlaylistSelector({ fonte1, setFonte1, fonte2, setFonte2,
                             <CreateOption titulo="Playlist" description="Crie uma playlist com músicas ou episódios" icon={PiMusicNotesPlus}></CreateOption>
                             <div className="h-[1px] bg-zinc-600 m-2"></div>
                             <CreateOption onClick={() => setChoices(true)} titulo="Playlist Mixer" description="Criação automática e randomizada de playlist" icon={PiExcludeDuotone}></CreateOption>
+                            <div className="h-[1px] bg-zinc-600 m-2"></div>
+                            <CreateOption onClick={() => setCriarComTrechos(true)} titulo="Playlist por Trechos" description="Crie playlist selecionando trechos específicos" icon={PiPuzzlePieceFill}></CreateOption>
                         </div>}
                     </div>}
                 </div>
